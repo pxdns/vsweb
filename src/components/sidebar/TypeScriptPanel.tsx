@@ -1,49 +1,126 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import * as monaco from 'monaco-editor';
 import { useEditorStore } from '../../store/editor';
-import { IconTypeScript, IconFile, IconChevronRight } from '../common/Icons';
+import { IconTypeScript, IconChevronRight } from '../common/Icons';
 
-interface TypeInfo {
-  symbol: string;
-  type: string;
-  documentation?: string;
-  location?: string;
+interface OutlineItem {
+  name: string;
+  detail?: string;
+  kind: monaco.languages.SymbolKind;
+  range: monaco.IRange;
+  selectionRange: monaco.IRange;
+  children: OutlineItem[];
 }
 
-export function TypeScriptPanel() {
-  const { getActiveTab } = useEditorStore();
-  const activeTab = getActiveTab();
-  const [hoveredInfo, setHoveredInfo] = useState<TypeInfo | null>(null);
-  const [outlineItems, setOutlineItems] = useState<OutlineItem[]>([]);
+async function getDocumentSymbols(model: monaco.editor.ITextModel): Promise<OutlineItem[]> {
+  try {
+    // Use Monaco's document symbol providers
+    const providers = (monaco.languages as any)._registry?._entries ?? [];
+    // Fallback: use the internal outline model approach
+    const tokenizationSupport = (monaco.languages as any).DocumentSymbolProviderRegistry;
+    if (tokenizationSupport) {
+      const ordered = tokenizationSupport.ordered(model);
+      if (ordered && ordered.length > 0) {
+        const results = await Promise.all(
+          ordered.map((p: any) => p.provideDocumentSymbols(model, new (monaco as any).CancellationTokenSource().token))
+        );
+        const symbols = results.flat().filter(Boolean) as any[];
+        return symbols.map(mapSymbol);
+      }
+    }
+  } catch {}
+  return [];
+}
 
-  // Get outline symbols from Monaco for the active file
-  useEffect(() => {
-    if (!activeTab || !['typescript', 'javascript'].includes(activeTab.language)) {
+function mapSymbol(s: any): OutlineItem {
+  return {
+    name: s.name,
+    detail: s.detail,
+    kind: s.kind,
+    range: s.range,
+    selectionRange: s.selectionRange ?? s.range,
+    children: (s.children ?? []).map(mapSymbol),
+  };
+}
+
+const KIND_INFO: Record<number, { label: string; color: string }> = {
+  0: { label: 'file', color: 'var(--fg2)' },
+  1: { label: 'mod', color: 'var(--syntax-keyword)' },
+  2: { label: 'ns', color: 'var(--syntax-keyword)' },
+  3: { label: 'pkg', color: 'var(--syntax-keyword)' },
+  4: { label: 'cls', color: 'var(--syntax-type)' },
+  5: { label: 'mth', color: 'var(--syntax-function)' },
+  6: { label: 'prp', color: 'var(--syntax-variable)' },
+  7: { label: 'fld', color: 'var(--syntax-variable)' },
+  8: { label: 'ctr', color: 'var(--syntax-function)' },
+  9: { label: 'enm', color: 'var(--syntax-type)' },
+  10: { label: 'ifc', color: 'var(--syntax-type)' },
+  11: { label: 'fn', color: 'var(--syntax-function)' },
+  12: { label: 'var', color: 'var(--syntax-variable)' },
+  13: { label: 'const', color: 'var(--syntax-variable)' },
+  14: { label: 'str', color: 'var(--syntax-string)' },
+  15: { label: 'num', color: 'var(--syntax-number)' },
+  16: { label: 'bool', color: 'var(--syntax-keyword)' },
+  17: { label: 'arr', color: 'var(--syntax-variable)' },
+  18: { label: 'obj', color: 'var(--syntax-variable)' },
+  19: { label: 'key', color: 'var(--syntax-variable)' },
+  20: { label: 'null', color: 'var(--fg3)' },
+  21: { label: 'emb', color: 'var(--accent)' },
+  22: { label: 'strc', color: 'var(--syntax-type)' },
+  23: { label: 'evt', color: 'var(--accent)' },
+  24: { label: 'op', color: 'var(--syntax-function)' },
+  25: { label: 'typ', color: 'var(--syntax-type)' },
+};
+
+export function TypeScriptPanel() {
+  const { getActiveTab, layout } = useEditorStore();
+  const activeTab = getActiveTab();
+  const [outlineItems, setOutlineItems] = useState<OutlineItem[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const refreshOutline = useCallback(async () => {
+    if (!activeTab || !['typescript', 'javascript', 'typescriptreact', 'javascriptreact'].includes(activeTab.language)) {
       setOutlineItems([]);
       return;
     }
 
     const modelUri = monaco.Uri.parse(`file://${activeTab.path}`);
     const model = monaco.editor.getModel(modelUri);
+    if (!model) {
+      setOutlineItems([]);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const symbols = await getDocumentSymbols(model);
+      setOutlineItems(symbols);
+    } catch {
+      setOutlineItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeTab?.id, activeTab?.language, activeTab?.path]);
+
+  useEffect(() => {
+    refreshOutline();
+
+    if (!activeTab) return;
+    const modelUri = monaco.Uri.parse(`file://${activeTab.path}`);
+    const model = monaco.editor.getModel(modelUri);
     if (!model) return;
 
-    const updateOutline = async () => {
-      try {
-        // @ts-ignore - getOutlineModel is internal
-        const symbols = await monaco.languages.getOutlineModel?.(model);
-        if (symbols && (symbols as any)._groups) {
-          const items = flattenSymbols((symbols as any)._groups);
-          setOutlineItems(items);
-        }
-      } catch {
-        setOutlineItems([]);
-      }
+    // Debounced refresh on content change
+    let timer: ReturnType<typeof setTimeout>;
+    const disposable = model.onDidChangeContent(() => {
+      clearTimeout(timer);
+      timer = setTimeout(refreshOutline, 800);
+    });
+    return () => {
+      disposable.dispose();
+      clearTimeout(timer);
     };
-
-    updateOutline();
-    const listener = model.onDidChangeContent(() => updateOutline());
-    return () => listener.dispose();
-  }, [activeTab?.id]);
+  }, [activeTab?.id, refreshOutline]);
 
   if (!activeTab) {
     return (
@@ -53,13 +130,13 @@ export function TypeScriptPanel() {
         </div>
         <div className="empty-state">
           <div className="empty-state-title">No file open</div>
-          <div className="empty-state-text">Open a TypeScript file to explore its types</div>
+          <div className="empty-state-text">Open a TypeScript or JavaScript file to see its structure</div>
         </div>
       </>
     );
   }
 
-  const isTs = ['typescript', 'javascript'].includes(activeTab.language);
+  const isTs = ['typescript', 'javascript', 'typescriptreact', 'javascriptreact'].includes(activeTab.language);
 
   return (
     <>
@@ -67,33 +144,53 @@ export function TypeScriptPanel() {
         <span className="sidebar-title">TypeScript</span>
       </div>
       <div className="sidebar-content">
-        {/* Current file info */}
+        {/* Current file header */}
         <div style={{
-          padding: '8px 12px',
+          padding: '6px 12px',
           borderBottom: '1px solid var(--border)',
-          fontSize: 12,
+          fontSize: 11,
           display: 'flex',
           alignItems: 'center',
           gap: 6,
         }}>
-          <IconTypeScript size={14}/>
-          <span style={{ color: 'var(--fg1)' }}>{activeTab.name}</span>
-          {!isTs && <span style={{ color: 'var(--fg3)', fontSize: 11 }}>(not TypeScript)</span>}
+          <IconTypeScript size={13}/>
+          <span style={{ color: 'var(--fg1)', fontWeight: 500 }}>{activeTab.name}</span>
+          {!isTs && <span style={{ color: 'var(--fg3)', fontSize: 10 }}>(not TypeScript)</span>}
         </div>
 
         {isTs && (
           <>
-            <OutlineSection items={outlineItems} fileId={activeTab.fileId} path={activeTab.path}/>
-
-            {/* Type info panel */}
-            <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border)' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg3)', marginBottom: 8 }}>
-                Hover Info
+            {/* Outline section */}
+            <div>
+              <div style={{
+                padding: '6px 12px 4px',
+                fontSize: 10,
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.07em',
+                color: 'var(--fg3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}>
+                <span>Outline</span>
+                {loading && <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, fontSize: 10, color: 'var(--fg3)' }}>…</span>}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--fg2)', lineHeight: 1.6 }}>
-                Hover over a symbol in the editor to see type information here.
-              </div>
+              {outlineItems.length === 0 && !loading ? (
+                <div style={{ padding: '6px 12px', fontSize: 11, color: 'var(--fg3)' }}>
+                  No symbols found
+                </div>
+              ) : (
+                <div>
+                  {outlineItems.map((item, i) => (
+                    <SymbolItem key={i} item={item} depth={0} path={activeTab.path}/>
+                  ))}
+                </div>
+              )}
             </div>
+
+            {/* Diagnostics summary */}
+            <DiagnosticsSummary path={activeTab.path}/>
           </>
         )}
       </div>
@@ -101,83 +198,69 @@ export function TypeScriptPanel() {
   );
 }
 
-interface OutlineItem {
-  name: string;
-  kind: number;
-  range: { startLineNumber: number };
-  children?: OutlineItem[];
-}
+function DiagnosticsSummary({ path }: { path: string }) {
+  const [counts, setCounts] = useState({ errors: 0, warnings: 0 });
 
-function flattenSymbols(groups: any[]): OutlineItem[] {
-  const items: OutlineItem[] = [];
-  for (const g of groups) {
-    if (g.label) {
-      items.push({
-        name: g.label,
-        kind: g.kind,
-        range: g.range ?? { startLineNumber: 0 },
-        children: g.children ? flattenSymbols(g.children) : [],
+  useEffect(() => {
+    const update = () => {
+      const modelUri = monaco.Uri.parse(`file://${path}`);
+      const markers = monaco.editor.getModelMarkers({ resource: modelUri });
+      setCounts({
+        errors: markers.filter(m => m.severity === monaco.MarkerSeverity.Error).length,
+        warnings: markers.filter(m => m.severity === monaco.MarkerSeverity.Warning).length,
       });
-    }
+    };
+    update();
+    const d = monaco.editor.onDidChangeMarkers(() => update());
+    return () => d.dispose();
+  }, [path]);
+
+  if (counts.errors === 0 && counts.warnings === 0) {
+    return (
+      <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span>✓</span>
+        <span>No problems</span>
+      </div>
+    );
   }
-  return items;
-}
-
-const SYMBOL_KINDS: Record<number, { label: string; color: string }> = {
-  5: { label: 'class', color: 'var(--syntax-type)' },
-  11: { label: 'interface', color: 'var(--syntax-type)' },
-  12: { label: 'function', color: 'var(--syntax-function)' },
-  13: { label: 'variable', color: 'var(--syntax-variable)' },
-  8: { label: 'field', color: 'var(--syntax-variable)' },
-  6: { label: 'method', color: 'var(--syntax-function)' },
-  10: { label: 'enum', color: 'var(--syntax-type)' },
-  1: { label: 'module', color: 'var(--syntax-keyword)' },
-  2: { label: 'namespace', color: 'var(--syntax-keyword)' },
-  14: { label: 'const', color: 'var(--syntax-variable)' },
-  15: { label: 'enum member', color: 'var(--syntax-number)' },
-  17: { label: 'property', color: 'var(--syntax-variable)' },
-  18: { label: 'event', color: 'var(--accent)' },
-  20: { label: 'type', color: 'var(--syntax-type)' },
-  21: { label: 'alias', color: 'var(--syntax-type)' },
-};
-
-function OutlineSection({ items, fileId, path }: { items: OutlineItem[]; fileId: string; path: string }) {
-  const openFile = useEditorStore(s => s.openFile);
 
   return (
-    <div>
-      <div style={{ padding: '6px 12px 2px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--fg3)' }}>
-        Outline
-      </div>
-      {items.length === 0 ? (
-        <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--fg3)' }}>
-          No symbols found
-        </div>
-      ) : (
-        <div>
-          {items.map((item, i) => (
-            <OutlineItem key={i} item={item} depth={0} onOpen={() => openFile(fileId)}/>
-          ))}
-        </div>
+    <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border)', fontSize: 11, display: 'flex', gap: 12 }}>
+      {counts.errors > 0 && (
+        <span style={{ color: 'var(--error)' }}>✗ {counts.errors} error{counts.errors !== 1 ? 's' : ''}</span>
+      )}
+      {counts.warnings > 0 && (
+        <span style={{ color: 'var(--warning)' }}>⚠ {counts.warnings} warning{counts.warnings !== 1 ? 's' : ''}</span>
       )}
     </div>
   );
 }
 
-function OutlineItem({ item, depth, onOpen }: { item: OutlineItem; depth: number; onOpen: () => void }) {
-  const [expanded, setExpanded] = useState(true);
-  const kindInfo = SYMBOL_KINDS[item.kind] ?? { label: 'symbol', color: 'var(--fg2)' };
+function SymbolItem({ item, depth, path }: { item: OutlineItem; depth: number; path: string }) {
+  const [expanded, setExpanded] = useState(depth < 1);
+  const kindInfo = KIND_INFO[item.kind as number] ?? { label: '??', color: 'var(--fg2)' };
   const hasChildren = item.children && item.children.length > 0;
+
+  const navigate = () => {
+    const modelUri = monaco.Uri.parse(`file://${path}`);
+    const editors = monaco.editor.getEditors();
+    for (const ed of editors) {
+      if (ed.getModel()?.uri.toString() === modelUri.toString()) {
+        ed.revealLineInCenter(item.selectionRange.startLineNumber);
+        ed.setPosition({ lineNumber: item.selectionRange.startLineNumber, column: item.selectionRange.startColumn });
+        ed.focus();
+        break;
+      }
+    }
+    if (hasChildren) setExpanded(e => !e);
+  };
 
   return (
     <>
       <div
         className="tree-item"
         style={{ paddingLeft: depth * 12 + 8 }}
-        onClick={() => {
-          onOpen();
-          if (hasChildren) setExpanded(!expanded);
-        }}
+        onClick={navigate}
       >
         {hasChildren ? (
           <span className={`tree-item-arrow${expanded ? ' expanded' : ''}`}>
@@ -187,26 +270,34 @@ function OutlineItem({ item, depth, onOpen }: { item: OutlineItem; depth: number
           <span style={{ width: 16, flexShrink: 0 }}/>
         )}
         <span style={{
-          fontSize: 10,
-          padding: '0 4px',
+          fontSize: 9,
+          padding: '1px 3px',
           borderRadius: 2,
           background: 'var(--bg3)',
           color: kindInfo.color,
           fontFamily: 'monospace',
           marginRight: 6,
           flexShrink: 0,
+          minWidth: 22,
+          textAlign: 'center',
+          letterSpacing: '0.02em',
         }}>
-          {kindInfo.label.slice(0, 2)}
+          {kindInfo.label}
         </span>
         <span className="tree-item-name" style={{ color: kindInfo.color }}>
           {item.name}
         </span>
-        <span style={{ fontSize: 10, color: 'var(--fg3)', marginLeft: 'auto', paddingRight: 4 }}>
-          :{item.range.startLineNumber}
+        {item.detail && (
+          <span style={{ fontSize: 10, color: 'var(--fg3)', marginLeft: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+            {item.detail}
+          </span>
+        )}
+        <span style={{ fontSize: 10, color: 'var(--fg3)', marginLeft: 'auto', paddingRight: 4, flexShrink: 0 }}>
+          :{item.selectionRange.startLineNumber}
         </span>
       </div>
-      {hasChildren && expanded && item.children?.map((child, i) => (
-        <OutlineItem key={i} item={child} depth={depth + 1} onOpen={onOpen}/>
+      {hasChildren && expanded && item.children.map((child, i) => (
+        <SymbolItem key={i} item={child} depth={depth + 1} path={path}/>
       ))}
     </>
   );

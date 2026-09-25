@@ -248,8 +248,9 @@ export function MonacoEditor({ tab, splitId, isActive }: Props) {
       wordWrap: settings.editor.wordWrap,
       minimap: { enabled: settings.editor.minimap },
       lineNumbers: settings.editor.lineNumbers,
+      inlayHints: { enabled: settings.typescript.inlayHints ? 'on' : 'off' } as any,
     });
-  }, [settings.editor]);
+  }, [settings.editor, settings.typescript.inlayHints]);
 
   // Focus when tab becomes active
   useEffect(() => {

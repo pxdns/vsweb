@@ -1,7 +1,8 @@
 import { useEditorStore } from '../../store/editor';
 import { TabBar } from '../tabs/TabBar';
 import { MonacoEditor } from './MonacoEditor';
-import { IconFile, IconVSWeb } from '../common/Icons';
+import { Breadcrumbs } from './Breadcrumbs';
+import { IconVSWeb } from '../common/Icons';
 
 function WelcomePane() {
   return (
@@ -31,6 +32,7 @@ export function EditorArea() {
             className={`editor-split${isActiveSplit ? ' active-split' : ''}`}
           >
             <TabBar split={split} isActiveSplit={isActiveSplit}/>
+            {activeTab && <Breadcrumbs tab={activeTab}/>}
             <div className="editor-container">
               {split.tabs.length === 0 ? (
                 <WelcomePane/>
