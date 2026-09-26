@@ -98,6 +98,10 @@ export interface ThemeColors {
   info: string;
   success: string;
 
+  // Chrome-specific backgrounds (optional, fall back to bg values)
+  titlebarBg?: string;
+  activitybarBg?: string;
+
   // Borders
   border: string;
   borderFocus: string;

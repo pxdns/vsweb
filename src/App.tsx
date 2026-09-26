@@ -164,17 +164,18 @@ function TitleBar() {
     <div className="ide-titlebar">
       <div className="ide-titlebar-logo">
         <VSWebLogo/>
-        <span>VSWeb</span>
       </div>
 
       <div className="ide-titlebar-menu">
         {[
           { label: 'File', action: () => setNewProjectOpen(true) },
           { label: 'Edit', action: () => {} },
+          { label: 'Selection', action: () => {} },
           { label: 'View', action: () => {} },
           { label: 'Go', action: () => {} },
           { label: 'Run', action: () => {} },
           { label: 'Terminal', action: () => {} },
+          { label: 'Help', action: () => {} },
         ].map(item => (
           <button key={item.label} className="ide-titlebar-menu-item" onClick={item.action}>
             {item.label}
@@ -183,36 +184,37 @@ function TitleBar() {
       </div>
 
       <div className="ide-titlebar-center">
-        {/* Breadcrumb / search trigger */}
+        {/* Command palette trigger — VS Code style search bar */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            background: 'var(--bg3)',
-            border: '1px solid var(--border)',
+            background: 'rgba(255,255,255,0.1)',
+            border: '1px solid rgba(255,255,255,0.12)',
             borderRadius: 4,
-            padding: '3px 10px',
+            padding: '2px 10px',
             gap: 6,
             cursor: 'pointer',
             fontSize: 12,
-            color: 'var(--fg2)',
-            minWidth: 280,
-            maxWidth: 480,
+            color: 'rgba(255,255,255,0.6)',
+            minWidth: 300,
+            maxWidth: 500,
+            height: 22,
           }}
           onClick={() => setCommandPaletteOpen(true)}
         >
-          <span>⌘</span>
-          <span style={{ flex: 1, textAlign: 'center' }}>
+          <span style={{ fontSize: 11 }}>⌘</span>
+          <span style={{ flex: 1, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {workspace ? (
               <>
                 {workspace.name}
-                {activeTab ? <> / <span style={{ color: 'var(--fg1)' }}>{activeTab.name}</span></> : null}
+                {activeTab ? <> — <span style={{ color: 'rgba(255,255,255,0.8)' }}>{activeTab.name}</span></> : null}
               </>
             ) : (
-              'Open or create a project...'
+              'VSWeb'
             )}
           </span>
-          <span>P</span>
+          <span style={{ fontSize: 10, opacity: 0.7 }}>P</span>
         </div>
       </div>
 
@@ -221,6 +223,7 @@ function TitleBar() {
           className="ide-titlebar-action-btn"
           onClick={() => setWorkspaceSwitcherOpen(true)}
           title="Switch Workspace"
+          style={{ fontSize: 16 }}
         >
           ⊞
         </button>
@@ -228,6 +231,7 @@ function TitleBar() {
           className="ide-titlebar-action-btn"
           onClick={() => setSettingsOpen(true)}
           title="Settings"
+          style={{ fontSize: 13 }}
         >
           ⚙
         </button>

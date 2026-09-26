@@ -1,6 +1,21 @@
 // SVG icon components — minimal, consistent, no emoji
 import type { SVGProps } from 'react';
 
+// Codicon font-based icon (uses @vscode/codicons)
+interface CodiconProps {
+  name: string;
+  size?: number;
+  style?: React.CSSProperties;
+  className?: string;
+}
+export const Codicon = ({ name, size = 16, style, className }: CodiconProps) => (
+  <i
+    className={`codicon codicon-${name}${className ? ` ${className}` : ''}`}
+    style={{ fontSize: size, lineHeight: 1, display: 'inline-block', ...style }}
+    aria-hidden="true"
+  />
+);
+
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
 const Icon = ({ size = 16, children, ...props }: IconProps & { children: React.ReactNode }) => (

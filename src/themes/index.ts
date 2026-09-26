@@ -3,33 +3,36 @@ import type { Theme, ThemeId } from '../types';
 export const themes: Record<ThemeId, Theme> = {
   dark: {
     id: 'dark',
-    name: 'Dark',
+    name: 'Dark+ (Default)',
     type: 'dark',
     monacoTheme: 'vs-dark',
     colors: {
-      bg0: '#0d0d0d',
-      bg1: '#141414',
-      bg2: '#1a1a1a',
-      bg3: '#242424',
-      bg4: '#2e2e2e',
-      fg0: '#e0e0e0',
-      fg1: '#a8a8a8',
-      fg2: '#686868',
-      fg3: '#484848',
-      accent: '#4d9de0',
+      // Exact VS Code Dark+ palette
+      bg0: '#252526',    // sidebar / panel backgrounds
+      bg1: '#1e1e1e',    // editor background / active tab
+      bg2: '#2d2d30',    // tab bar / inactive areas
+      bg3: '#37373d',    // hover states
+      bg4: '#3e3e42',    // focused hover / active list
+      fg0: '#cccccc',    // primary text
+      fg1: '#9d9d9d',    // secondary text
+      fg2: '#6b6b6b',    // muted / disabled text
+      fg3: '#4d4d4d',    // placeholder text
+      accent: '#007acc', // VS Code blue
       accentFg: '#ffffff',
-      accentMuted: '#1e3a52',
-      error: '#f87171',
-      warning: '#fbbf24',
-      info: '#60a5fa',
-      success: '#4ade80',
-      border: '#2a2a2a',
-      borderFocus: '#4d9de0',
-      gitAdded: '#4ade80',
-      gitModified: '#fbbf24',
-      gitDeleted: '#f87171',
-      gitIgnored: '#686868',
-      gitConflict: '#f97316',
+      accentMuted: '#094771', // selection highlight
+      error: '#f14c4c',
+      warning: '#cca700',
+      info: '#3794ff',
+      success: '#4ec9b0',
+      border: '#3c3c3c',
+      borderFocus: '#007acc',
+      titlebarBg: '#3c3c3c',
+      activitybarBg: '#333333',
+      gitAdded: '#81b88b',
+      gitModified: '#e2c08d',
+      gitDeleted: '#c74e39',
+      gitIgnored: '#6b6b6b',
+      gitConflict: '#e4676b',
       syntaxKeyword: '#569cd6',
       syntaxString: '#ce9178',
       syntaxComment: '#6a9955',
@@ -292,6 +295,8 @@ export function getThemeCssVars(theme: Theme): Record<string, string> {
   vars['--success'] = c.success;
   vars['--border'] = c.border;
   vars['--border-focus'] = c.borderFocus;
+  vars['--titlebar-bg'] = c.titlebarBg ?? c.bg2;
+  vars['--activitybar-bg'] = c.activitybarBg ?? c.bg0;
   vars['--git-added'] = c.gitAdded;
   vars['--git-modified'] = c.gitModified;
   vars['--git-deleted'] = c.gitDeleted;
