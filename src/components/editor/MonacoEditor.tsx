@@ -208,10 +208,17 @@ export function MonacoEditor({ tab, splitId, isActive }: Props) {
       }
     });
 
-    // Save on Ctrl+S
+    // Save on Ctrl+S (with optional format)
     const saveAction = editor.addCommand(
       monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
       () => {
+        if (settings.editor.formatOnSave) {
+          const action = editor.getAction('editor.action.formatDocument');
+          if (action) {
+            action.run().then(() => saveFile(tab.id)).catch(() => saveFile(tab.id));
+            return;
+          }
+        }
         saveFile(tab.id);
       }
     );

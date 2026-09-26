@@ -4,6 +4,7 @@ import { useUIStore } from './store/ui';
 import { useWorkspaceStore } from './store/workspace';
 import { useEditorStore } from './store/editor';
 import { themes, getThemeCssVars } from './themes';
+import { configureTypeScript } from './services/typescript';
 
 // Components
 import { ActivityBar } from './components/ActivityBar';
@@ -44,6 +45,11 @@ export default function App() {
     applyTheme(settings.appearance.theme);
   }, [settings.appearance.theme]);
 
+  // Configure TypeScript language service
+  useEffect(() => {
+    configureTypeScript(settings.typescript);
+  }, [settings.typescript]);
+
   // Global keyboard shortcuts
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const ctrl = e.ctrlKey || e.metaKey;
@@ -76,6 +82,29 @@ export default function App() {
     if (ctrl && e.key === '\\') {
       e.preventDefault();
       splitEditor();
+      return;
+    }
+    if (ctrl && e.key === 'g') {
+      e.preventDefault();
+      // Trigger Go to Line on the active editor
+      import('monaco-editor').then(monaco => {
+        const editors = monaco.editor.getEditors();
+        for (const ed of editors) {
+          if (ed.hasTextFocus() || ed.getDomNode()?.contains(document.activeElement)) {
+            ed.getAction('editor.action.gotoLine')?.run();
+            return;
+          }
+        }
+        editors[0]?.getAction('editor.action.gotoLine')?.run();
+      });
+      return;
+    }
+    if (ctrl && e.shiftKey && e.key === 'F') {
+      e.preventDefault();
+      // Focus search panel
+      import('./store/ui').then(({ useUIStore }) => {
+        useUIStore.getState().setSidebarPanel('search');
+      });
       return;
     }
     if (e.key === 'Escape') {
